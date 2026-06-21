@@ -47,6 +47,21 @@ function createUrl(base, params) {
   return url.toString();
 }
 
+function getPublishingAccount(req) {
+  if (req.session.instagram?.accessToken && req.session.instagram?.userId) {
+    return req.session.instagram;
+  }
+
+  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
+  const userId = process.env.INSTAGRAM_USER_ID;
+
+  if (accessToken && userId) {
+    return { accessToken, userId };
+  }
+
+  return null;
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -113,18 +128,21 @@ app.get("/api/auth/instagram/callback", async (req, res) => {
 });
 
 app.get("/api/instagram/status", (req, res) => {
-  const instagram = req.session.instagram;
+  const instagram = getPublishingAccount(req);
   res.json({
-    connected: Boolean(instagram?.accessToken && instagram?.userId),
+    connected: Boolean(instagram),
     userId: instagram?.userId || null,
+    source: req.session.instagram ? "oauth-session" : instagram ? "server-environment" : null,
   });
 });
 
 app.post("/api/instagram/publish", async (req, res) => {
   try {
-    const instagram = req.session.instagram;
-    if (!instagram?.accessToken || !instagram?.userId) {
-      return res.status(401).json({ error: "Instagram account is not connected." });
+    const instagram = getPublishingAccount(req);
+    if (!instagram) {
+      return res.status(401).json({
+        error: "No publishing account is configured. Complete OAuth or set the server environment variables.",
+      });
     }
 
     const { imageUrl, caption = "" } = req.body;
